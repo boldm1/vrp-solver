@@ -1,0 +1,22 @@
+.env
+
+# Solution plots
+plots/
+
+# Python cache
+__pycache__/
+
+# Pytest cache
+.pytest_cache/
+
+# Poetry virtual environment
+.venv/
+
+# IDE configuration
+.vscode/
+.idea/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
