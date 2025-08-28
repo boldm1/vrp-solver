@@ -41,27 +41,29 @@ class VrpSolution:
         Raises:
             ValueError: If location_coords are not available to plot.
         """
-        if not self.instance.location_coords:
-            raise ValueError("Cannot plot solution without location_coords.")
+        all_locations = self.instance.distance_matrix.locations
+        if not all([loc.coords for loc in all_locations]):
+            raise ValueError("Cannot plot solution without coordinates for all locations.")
 
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
 
         # Plot locations
-        x = [coord[0] for coord in self.instance.location_coords]
-        y = [coord[1] for coord in self.instance.location_coords]
+        location_coords = [loc.coords for loc in all_locations]
+        x = [coord[0] for coord in location_coords]
+        y = [coord[1] for coord in location_coords]
         ax.scatter(x, y, c="red", s=100, zorder=2, label="Locations")
 
         # Highlight depot
-        if self.instance.location_coords:
+        for depot in self.instance.depots:
             ax.scatter(
-                x[self.instance.depot_index],
-                y[self.instance.depot_index],
+                depot.coords[0],
+                depot.coords[1],
                 c="indigo",
                 s=200,
                 zorder=3,
                 marker="s",
-                label="Depot",
+                label=f"Depot: {depot.name}",
             )
 
         # Draw each tour

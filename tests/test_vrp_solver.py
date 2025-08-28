@@ -3,7 +3,7 @@ import os
 
 from matplotlib import pyplot as plt
 
-from src.instance import VrpInstance
+from src.instance import Customer, Depot, DistanceMatrix, VrpInstance
 from src.model import VrpSolver
 from tests.conftest import params
 
@@ -11,30 +11,28 @@ from tests.conftest import params
 class TestVrpSolver:
     @params(
         {
-            # 0 vehicles
-            "Test 1": {
-                "distance_matrix": [[0, 10], [10, 0]],
-                "num_vehicles": 1,
-                "depot_index": 0,
+            "1 depot, 1 customer": {
+                "depots": (Depot(name="D1", coords=(0, 0), num_vehicles=1),),
+                "customers": (Customer(name="C1", coords=(1, 1), demand=1),),
+                "matrix": ((0, 10), (10, 0)),
                 "expected_tours": [[0, 1, 0]],
             },
         }
     )
-    def test_basic_cases(
-        self, distance_matrix, num_vehicles, depot_index, expected_tours
-    ):
+    def test_basic_cases(self, depots, customers, matrix, expected_tours):
+        # The order of locations for the distance matrix is depots then customers
+        all_locations = depots + customers
+        distance_matrix = DistanceMatrix(locations=all_locations, matrix=matrix)
+
         instance = VrpInstance(
-            distance_matrix=distance_matrix,
-            num_vehicles=num_vehicles,
-            depot_index=depot_index,
+            depots=depots, customers=customers, distance_matrix=distance_matrix
         )
         solver = VrpSolver(instance)
         solver.build()
         solution = solver.solve()
         assert solution is not None
         assert solution.tours == expected_tours
-        assert solution.instance.distance_matrix == distance_matrix
-        assert solution.instance.location_coords is None
+        assert solution.instance == instance
 
     def test_with_google_vrp_example(self):
         """Test solver on instance taken from https://developers.google.com/optimization/routing/vrp."""

@@ -41,10 +41,17 @@ class VrpSolver:
         self.m = Model(solver_name="HIGHS")
         self.instance = instance
 
+        # For now, we assume a single depot. This can be extended later.
+        if len(instance.depots) != 1:
+            raise NotImplementedError("Solver currently supports only one depot.")
+        self.depot = instance.depots[0]
+        self.depot_index = instance.distance_matrix.get_index(self.depot)
+
         # Locations to visit
-        self.V = [i for i in range(instance.num_locations)]
+        num_locations = len(instance.distance_matrix.locations)
+        self.V = [i for i in range(num_locations)]
         self.V_excl_depot = [
-            v for v in self.V if v != instance.depot_index
+            v for v in self.V if v != self.depot_index
         ]
 
     def build(self):
@@ -88,12 +95,12 @@ class VrpSolver:
             self.m.add_constr(xsum(self.x[i][j] for j in self.V) == 1)
 
         self.m.add_constr(
-            xsum(self.x[self.instance.depot_index][j] for j in self.V_excl_depot)
+            xsum(self.x[self.depot_index][j] for j in self.V_excl_depot)
             == self.instance.num_vehicles
         )
 
         self.m.add_constr(
-            xsum(self.x[i][self.instance.depot_index] for i in self.V_excl_depot)
+            xsum(self.x[i][self.depot_index] for i in self.V_excl_depot)
             == self.instance.num_vehicles
         )
 
@@ -107,7 +114,7 @@ class VrpSolver:
 
         self.m.objective = minimize(
             xsum(
-                self.instance.distance_matrix[i][j] * self.x[i][j]
+                self.instance.distance_matrix.matrix[i][j] * self.x[i][j]
                 for i in self.V
                 for j in self.V
             )
@@ -239,7 +246,7 @@ class VrpSolver:
             ]
             all_tours = self._extract_tours(adj_matrix)
             subtours = [
-                tour for tour in all_tours if self.instance.depot_index not in tour
+                tour for tour in all_tours if self.depot_index not in tour
             ]
 
             if not subtours:
