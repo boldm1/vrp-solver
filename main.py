@@ -8,11 +8,13 @@ from src.model import VrpSolver
 
 
 def main():
-    """Main function to run the VRP solver on the Google VRP example."""
-    print("Running VRP solver on Google OR-Tools example...")
+    """
+    Main function to run the VRP solver on an instance defined in a locally saved json 
+    file.
+    """
 
     # 1. Load the problem instance from file
-    data_filepath = "data/google_vrp_example.json"
+    data_filepath = "data/multi_depot_example.json"
     instance = VrpInstance.from_json_file(data_filepath)
 
     # 2. Create and build the solver
@@ -25,7 +27,7 @@ def main():
     # 4. Process and plot the solution
     if solution:
         print("\n--- Solution Summary ---")
-        print(f"Objective value: {solution.objective_value}")
+        print(f"Objective value: {solution.objective_value:.4f}")
         print(f"Solve time: {solution.solve_time_secs:.2f} seconds")
         print("Tours:")
         for i, tour in enumerate(solution.tours):

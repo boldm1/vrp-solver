@@ -33,11 +33,11 @@ class Vehicle:
 
     Attributes:
         capacity: The capacity of the vehicle.
-        range: The range of the vehicle in kilometers.
+        range_kms: The range of the vehicle in kilometers.
     """
 
     capacity: int
-    range: int
+    range_kms: int
 
 
 @dataclass(frozen=True)

@@ -17,6 +17,23 @@ class TestVrpSolver:
                 "matrix": ((0, 10), (10, 0)),
                 "expected_tours": [[0, 1, 0]],
             },
+            "2 depots, 2 customers": {
+                "depots": (
+                    Depot(name="D1", coords=(0, 0), num_vehicles=1),
+                    Depot(name="D2", coords=(10, 10), num_vehicles=1),
+                ),
+                "customers": (
+                    Customer(name="C1", coords=(0, 5), demand=1),
+                    Customer(name="C2", coords=(10, 5), demand=1),
+                ),
+                "matrix": (
+                    (0, 14, 5, 100),  # D1 -> (D1, D2, C1, C2)
+                    (14, 0, 100, 5),  # D2 -> (D1, D2, C1, C2)
+                    (5, 100, 0, 10),  # C1 -> (D1, D2, C1, C2)
+                    (100, 5, 10, 0),  # C2 -> (D1, D2, C1, C2)
+                ),
+                "expected_tours": [[0, 2, 0], [1, 3, 1]],
+            },
         }
     )
     def test_basic_cases(self, depots, customers, matrix, expected_tours):
@@ -31,7 +48,8 @@ class TestVrpSolver:
         solver.build()
         solution = solver.solve()
         assert solution is not None
-        assert solution.tours == expected_tours
+        # Compare tours as a set of tuples to ignore order
+        assert set(map(tuple, solution.tours)) == set(map(tuple, expected_tours))
         assert solution.instance == instance
 
     def test_with_google_vrp_example(self):

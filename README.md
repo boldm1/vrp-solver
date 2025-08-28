@@ -43,30 +43,34 @@ poetry run pytest
 The basic workflow involves defining a problem instance, passing it to the solver, and then using the returned solution object.
 
 Here is a minimal example:
-
 ```python
-from src.instance import VrpInstance
+from src.instance import Customer, Depot, DistanceMatrix, VrpInstance
 from src.model import VrpSolver
 
-# 1. Define the problem instance
+# 1. Define locations and the distance matrix
+depot = Depot(name="D0", coords=(0, 0), num_vehicles=1)
+customer = Customer(name="C1", coords=(1, 1), demand=1)
+all_locs = (depot, customer)
+dist_matrix = DistanceMatrix(locations=all_locs, matrix=((0, 10), (10, 0)))
+
+# 2. Define the problem instance
 instance = VrpInstance(
-    distance_matrix=[[0, 10, 10], [10, 0, 5], [10, 5, 0]],
-    num_vehicles=1
+    depots=(depot,), customers=(customer,), distance_matrix=dist_matrix
 )
 
-# 2. Create and build the solver
+# 3. Create and build the solver
 solver = VrpSolver(instance)
 solver.build()
 
-# 3. Solve the model
+# 4. Solve the model
 solution = solver.solve()
 
-# 4. Use the solution
+# 5. Use the solution
 if solution:
     print(f"Tours: {solution.tours}")
     print(f"Cost: {solution.objective_value}")
 
-    # If location_coords were provided, you can also plot the solution
+    # If coordinates were provided in the instance, you can also plot the solution
     # fig = solution.plot()
     # fig.savefig("solution_plot.png")
 ```

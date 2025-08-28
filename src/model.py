@@ -3,6 +3,7 @@ import os
 from typing import List
 
 import highspy
+
 # Set PMIP_HIGHS_LIBRARY automatically to make mip find the HiGHS solver library.
 # This is more robust than hardcoding the filename.
 try:
@@ -15,6 +16,7 @@ except IndexError:
 import time
 
 from mip import BINARY, Model, OptimizationStatus, minimize, xsum
+
 from src.instance import VrpInstance
 from src.solution import VrpSolution
 
@@ -25,8 +27,8 @@ class VrpSolver:
 
     This class formulates the VRP as a MIP model and uses an iterative approach
     to handle subtour elimination constraints. The model aims to find the set of
-    routes with the minimum total distance for a fleet of vehicles to service a
-    set of locations, starting and ending at a depot.
+    routes with the minimum total distance for a fleet of vehicles to service a set
+    of locations, starting and ending at one or more depots.
     """
 
     def __init__(
@@ -41,18 +43,15 @@ class VrpSolver:
         self.m = Model(solver_name="HIGHS")
         self.instance = instance
 
-        # For now, we assume a single depot. This can be extended later.
-        if len(instance.depots) != 1:
-            raise NotImplementedError("Solver currently supports only one depot.")
-        self.depot = instance.depots[0]
-        self.depot_index = instance.distance_matrix.get_index(self.depot)
+        self.depot_idxs = {
+            instance.distance_matrix.get_index(depot) for depot in instance.depots
+        }
 
         # Locations to visit
         num_locations = len(instance.distance_matrix.locations)
         self.V = [i for i in range(num_locations)]
-        self.V_excl_depot = [
-            v for v in self.V if v != self.depot_index
-        ]
+        # Customers are all locations that are not depots
+        self.V_customers = [v for v in self.V if v not in self.depot_idxs]
 
     def build(self):
         """Builds the VRP model by defining variables, constraints, and the objective.
@@ -65,11 +64,12 @@ class VrpSolver:
               `i` to `j`, and 0 otherwise.
 
         Constraints:
-            - Each location (except the depot) must be entered exactly once.
-            - Each location (except the depot) must be exited exactly once.
-            - The number of vehicles leaving the depot equals `num_vehicles`.
-            - The number of vehicles returning to the depot equals `num_vehicles`.
-            - No self-cycles (e.g., traveling from a location to itself).
+            - Each customer must be entered and exited exactly once.
+            - The total number of vehicles leaving all depots must equal the total
+              number of available vehicles.
+            - For each individual depot, the number of vehicles that leave must equal
+              the number that return.
+            - No self-cycles are allowed (e.g., traveling from a location to itself).
 
         Objective:
             - Minimize the total distance traveled by all vehicles.
@@ -88,21 +88,25 @@ class VrpSolver:
         # Add constraints #
         ###################
 
-        for j in self.V_excl_depot:
+        # Each customer must be entered and exited exactly once.
+        for j in self.V_customers:
             self.m.add_constr(xsum(self.x[i][j] for i in self.V) == 1)
 
-        for i in self.V_excl_depot:
+        for i in self.V_customers:
             self.m.add_constr(xsum(self.x[i][j] for j in self.V) == 1)
 
+        # Total number of vehicles leaving all depots must equal the total number of vehicles.
         self.m.add_constr(
-            xsum(self.x[self.depot_index][j] for j in self.V_excl_depot)
+            xsum(self.x[d][j] for d in self.depot_idxs for j in self.V_customers)
             == self.instance.num_vehicles
         )
 
-        self.m.add_constr(
-            xsum(self.x[i][self.depot_index] for i in self.V_excl_depot)
-            == self.instance.num_vehicles
-        )
+        # For each depot, the number of vehicles leaving must equal the number returning.
+        for d in self.depot_idxs:
+            self.m.add_constr(
+                xsum(self.x[d][j] for j in self.V_customers)
+                == xsum(self.x[j][d] for j in self.V_customers)
+            )
 
         # Prevent self-cycles e.g. [(1, 1)]
         for i in self.V:
@@ -207,7 +211,7 @@ class VrpSolver:
 
         This method uses an iterative approach to find a solution without subtours:
         1. Solve the current model.
-        2. Check the solution for any subtours (tours not including the depot).
+        2. Check the solution for any subtours (tours not including any depot).
         3. If subtours exist, add constraints to eliminate them and re-solve.
         4. Repeat until a valid solution is found or the time limit is reached.
 
@@ -245,8 +249,12 @@ class VrpSolver:
                 [1 if self.x[i][j].x > 0.001 else 0 for j in self.V] for i in self.V
             ]
             all_tours = self._extract_tours(adj_matrix)
+            
+            # A tour is a subtour if it does not contain any depot.
             subtours = [
-                tour for tour in all_tours if self.depot_index not in tour
+                tour
+                for tour in all_tours
+                if not any(depot_idx in tour for depot_idx in self.depot_idxs)
             ]
 
             if not subtours:
