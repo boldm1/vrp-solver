@@ -14,10 +14,11 @@ except IndexError:
     # This may happen in some environments, but we'll let mip try to find it.
     print("Warning: Could not automatically find the HiGHS shared library.")
 import time
+from collections import defaultdict
 
 from mip import BINARY, Model, OptimizationStatus, minimize, xsum
 
-from src.instance import VrpInstance
+from src.instance import VrpInstance, Vehicle
 from src.solution import Tour, VrpSolution
 
 
@@ -34,35 +35,35 @@ class VrpSolver:
     def __init__(
         self,
         instance: VrpInstance,
+        use_symmetry_breaking: bool = True,
     ):
         """Initializes the VrpSolver.
 
         Args:
             instance: The VrpInstance object containing the problem data.
+            use_symmetry_breaking: Whether to add symmetry-breaking constraints.
         """
         self.m = Model(solver_name="HIGHS")
         self.instance = instance
 
-        # Assume a homogeneous fleet for capacity and range.
-        # The constraints will only be active if positive values are specified.
-        all_capacities = [
-            v.capacity for d in instance.depots for v in d.fleet if v.capacity > 0
-        ]
-        self.vehicle_capacity = min(all_capacities) if all_capacities else None
-
-        all_ranges = [
-            v.range_kms for d in instance.depots for v in d.fleet if v.range_kms > 0
-        ]
-        self.max_tour_length = min(all_ranges) if all_ranges else None
+        # Create a list of all vehicles and map them to their home depots.
+        self.vehicles: List[Vehicle] = [v for d in instance.depots for v in d.fleet]
+        self.num_vehicles = len(self.vehicles)
+        self.vehicle_depot_map = {}  # vehicle_idx -> depot_idx
+        k = 0
+        for depot in self.instance.depots:
+            depot_idx = self.instance.distance_matrix.get_index(depot)
+            for _ in depot.fleet:
+                self.vehicle_depot_map[k] = depot_idx
+                k += 1
+        self.use_symmetry_breaking = use_symmetry_breaking
 
         self.depot_idxs = {
             instance.distance_matrix.get_index(depot) for depot in instance.depots
         }
-
         # Locations to visit
         num_locations = len(instance.distance_matrix.locations)
         self.V = [i for i in range(num_locations)]
-        # Customers are all locations that are not depots
         self.V_customers = [v for v in self.V if v not in self.depot_idxs]
 
         # Create a mapping from customer index to demand
@@ -97,75 +98,112 @@ class VrpSolver:
         # Define variables #
         ####################
 
+        K = range(self.num_vehicles)
         self.x = {
-            i: {j: self.m.add_var(f"x({i}, {j})", var_type=BINARY) for j in self.V}
+            (i, j, k): self.m.add_var(var_type=BINARY, name=f"x({i},{j},{k})")
             for i in self.V
+            for j in self.V
+            for k in K
         }
 
         ###################
         # Add constraints #
         ###################
 
-        # Add capacity constraints if capacity is specified
-        if self.vehicle_capacity is not None and self.vehicle_capacity > 0:
-            Q = self.vehicle_capacity
-            # u_i is the cumulative demand delivered on the tour that visits customer i
-            self.u = {
-                i: self.m.add_var(f"u_{i}", lb=self.demands[i], ub=Q)
-                for i in self.V_customers
-            }
-
-            # For any arc from customer i to customer j, enforce capacity flow.
-            # This is a variant of the Miller-Tucker-Zemlin (MTZ) formulation.
-            for i in self.V_customers:
-                for j in self.V_customers:
-                    if i != j:
-                        self.m.add_constr(
-                            self.u[i] - self.u[j] + Q * self.x[i][j] <= Q - self.demands[j]
-                        )
-
-            # A customer's demand cannot exceed the vehicle capacity
-            for i in self.V_customers:
-                if self.demands[i] > Q:
-                    raise ValueError(
-                        f"Demand of customer {i} ({self.demands[i]}) exceeds vehicle capacity ({Q})."
+        # Add capacity constraints for each vehicle
+        for k in K:
+            capacity_k = self.vehicles[k].capacity
+            if capacity_k > 0:
+                # The total demand of customers visited by vehicle k cannot exceed its capacity.
+                self.m.add_constr(
+                    xsum(
+                        self.demands[i] * xsum(self.x[j, i, k] for j in self.V)
+                        for i in self.V_customers
                     )
+                    <= capacity_k
+                )
 
-        # Each customer must be entered and exited exactly once.
+        if self.use_symmetry_breaking:
+            # Group vehicle indices by their properties (depot, capacity, range).
+            identical_vehicle_groups = defaultdict(list)
+            for k, vehicle in enumerate(self.vehicles):
+                depot_k = self.vehicle_depot_map[k]
+                key = (depot_k, vehicle.capacity, vehicle.range_kms, vehicle.fixed_cost)
+                identical_vehicle_groups[key].append(k)
+
+            # Add symmetry-breaking constraints for identical vehicles from the same depot.
+            # When a fleet has multiple identical vehicles, the solver can find many
+            # equivalent solutions by simply swapping the tours between these vehicles.
+            # These constraints prevent this by imposing an arbitrary order, which can
+            # significantly speed up the search for a solution.
+            num_symmetry_constrs = 0
+            # For each group of identical vehicles, add ordering constraints.
+            for group in identical_vehicle_groups.values():
+                if len(group) > 1:
+                    # Sort vehicle indices to ensure a consistent order for the constraints.
+                    sorted_group = sorted(group)
+                    depot_idx = self.vehicle_depot_map[sorted_group[0]]
+                    for i in range(len(sorted_group) - 1):
+                        k1 = sorted_group[i]
+                        k2 = sorted_group[i + 1]
+                        # Enforce an ordering on vehicle usage:
+                        # if vehicle k2 is used, vehicle k1 must also be used.
+                        self.m.add_constr(
+                            xsum(self.x[depot_idx, j, k2] for j in self.V_customers)
+                            <= xsum(self.x[depot_idx, j, k1] for j in self.V_customers)
+                        )
+                        num_symmetry_constrs += 1
+
+            if num_symmetry_constrs > 0:
+                print(
+                    f"Added {num_symmetry_constrs} symmetry-breaking constraints for identical vehicles."
+                )
+
+        # Each customer must be visited exactly once by some vehicle.
         for j in self.V_customers:
-            self.m.add_constr(xsum(self.x[i][j] for i in self.V) == 1)
+            self.m.add_constr(xsum(self.x[i, j, k] for i in self.V for k in K) == 1)
 
-        for i in self.V_customers:
-            self.m.add_constr(xsum(self.x[i][j] for j in self.V) == 1)
-
-        # Total number of vehicles leaving all depots must equal the total number of vehicles.
-        self.m.add_constr(
-            xsum(self.x[d][j] for d in self.depot_idxs for j in self.V_customers)
-            == self.instance.num_vehicles
-        )
-
-        # For each depot, the number of vehicles leaving must equal the number returning.
-        for d in self.depot_idxs:
+        # For each vehicle, it must leave a node it enters.
+        for k in K:
+            # Each vehicle starts and ends at its assigned depot and has one tour at most.
+            depot_k = self.vehicle_depot_map[k]
             self.m.add_constr(
-                xsum(self.x[d][j] for j in self.V_customers)
-                == xsum(self.x[j][d] for j in self.V_customers)
+                xsum(self.x[depot_k, j, k] for j in self.V_customers) <= 1
             )
+            self.m.add_constr(
+                xsum(self.x[depot_k, j, k] for j in self.V_customers)
+                == xsum(self.x[j, depot_k, k] for j in self.V_customers)
+            )
+            for i in self.V_customers:
+                self.m.add_constr(
+                    xsum(self.x[j, i, k] for j in self.V)
+                    == xsum(self.x[i, l, k] for l in self.V)
+                )
 
         # Prevent self-cycles e.g. [(1, 1)]
         for i in self.V:
-            self.m.add_constr(self.x[i][i] == 0)
+            for k in K:
+                self.m.add_constr(self.x[i, i, k] == 0)
 
         #################
         # Add objective #
         #################
 
-        self.m.objective = minimize(
-            xsum(
-                self.instance.distance_matrix.matrix[i][j] * self.x[i][j]
-                for i in self.V
-                for j in self.V
-            )
+        total_travel_distance = xsum(
+            self.instance.distance_matrix.matrix[i][j] * self.x[i, j, k]
+            for i in self.V
+            for j in self.V
+            for k in K
         )
+
+        # Add fixed cost for each vehicle that is used (i.e., leaves the depot)
+        total_fixed_cost = xsum(
+            self.vehicles[k].fixed_cost
+            * xsum(self.x[self.vehicle_depot_map[k], j, k] for j in self.V_customers)
+            for k in K
+        )
+
+        self.m.objective = minimize(total_travel_distance + total_fixed_cost)
 
     @staticmethod
     def _extract_tours(adj_matrix: List[List[int]]) -> List[List[int]]:
@@ -187,43 +225,35 @@ class VrpSolver:
             A list of tours, where each tour is a list of location indices
             representing the path taken (e.g., [depot, loc1, loc2, depot]).
         """
-        n = len(adj_matrix)
-        if n == 0:
+        # Create a successor mapping from the adjacency matrix.
+        # The model constraints ensure each node has at most one successor.
+        successors = {
+            i: j
+            for i, row in enumerate(adj_matrix)
+            for j, val in enumerate(row)
+            if val == 1
+        }
+        if not successors:
             return []
 
-        used = set()  # Edges (i, j) that have already been used
+        visited_nodes = set()
         tours = []
+        for i in range(len(adj_matrix)):
+            if i in visited_nodes:
+                continue
 
-        def next_unused_edge_from(u):
-            for v, val in enumerate(adj_matrix[u]):
-                if val == 1 and (u, v) not in used:
-                    return v
-            return None
+            # Start tracing a tour from an unvisited node
+            tour = []
+            curr = i
+            while curr not in visited_nodes and curr is not None:
+                visited_nodes.add(curr)
+                tour.append(curr)
+                curr = successors.get(curr)
 
-        for start in range(n):
-            while True:
-                v0 = None
-                for v, val in enumerate(adj_matrix[start]):
-                    if val == 1 and (start, v) not in used:
-                        v0 = v
-                        break
-                if v0 is None:
-                    break
-                tour = [start]
-                current = start
-
-                while True:
-                    next_node = next_unused_edge_from(current)
-                    if next_node is None:
-                        break
-                    used.add((current, next_node))
-                    current = next_node
-                    tour.append(current)
-                    if current == start:  # closed cycle
-                        break
-
-                if len(tour) > 1 and tour[0] == tour[-1]:
-                    tours.append(tour)
+            # If we found a cycle, add it to the list of tours
+            if tour and curr == tour[0]:
+                tour.append(curr)  # Close the loop
+                tours.append(tour)
 
         return tours
 
@@ -236,47 +266,78 @@ class VrpSolver:
             length += self.instance.distance_matrix.matrix[u][v]
         return length
 
-    def _add_subtour_elimination_constrs(self, subtours: List[List[int]]) -> None:
-        """Adds subtour elimination constraints to the model for a given list of subtours.
+    def _add_generalized_subtour_break_constrs(self, subtours: List[List[int]]) -> None:
+        """Adds generalized subtour elimination constraints to the model.
 
         For each subtour, this method adds a constraint that ensures the number of
         active edges within the subtour's set of nodes is less than the number of
-        nodes, effectively breaking the cycle.
+        nodes, summed across ALL vehicles. This prevents any vehicle from forming
+        the subtour in future iterations.
 
         Args:
             subtours: A list of subtours to be eliminated. Each subtour is a list
-                of location indices.
+                of customer location indices.
         """
-        print(
-            f"Found {len(subtours)} invalid tours (subtours or too long). Adding constraints."
-        )
+        K = range(self.num_vehicles)
         for subtour in subtours:
             nodes_in_subtour = list(set(subtour))
             if len(nodes_in_subtour) > 1:
                 self.m.add_constr(
                     xsum(
-                        self.x[i][j] for i in nodes_in_subtour for j in nodes_in_subtour
+                        self.x[i, j, k]
+                        for i in nodes_in_subtour
+                        for j in nodes_in_subtour
+                        for k in K
                     )
                     <= len(nodes_in_subtour) - 1
                 )
 
-    def solve(self, time_limit_secs: int = 60) -> VrpSolution | None:
+    def _add_vehicle_specific_tour_break_constrs(
+        self, invalid_tours: List[tuple[List[int], int]]
+    ) -> None:
+        """Adds vehicle-specific tour-breaking constraints to the model.
+
+        This is used for constraints that only apply to a specific vehicle, such
+        as a tour that exceeds a vehicle's specific range.
+
+        Args:
+            invalid_tours: A list of tours to be eliminated. Each element is a
+                tuple containing the tour (a list of location indices) and the
+                vehicle index `k` that performed it.
+        """
+        for tour, k in invalid_tours:
+            nodes_in_tour = list(set(tour))
+            if len(nodes_in_tour) > 1:
+                self.m.add_constr(
+                    xsum(
+                        self.x[i, j, k]
+                        for i in nodes_in_tour
+                        for j in nodes_in_tour
+                    )
+                    <= len(nodes_in_tour) - 1
+                )
+
+    def solve(self, time_limit_secs: int = 60, verbose: bool = False) -> VrpSolution | None:
         """Solves the VRP model and returns the optimal tours.
 
         This method uses an iterative approach to find a solution without subtours:
         1. Solve the current model.
-        2. Check the solution for any subtours (tours not including any depot).
-        3. If subtours exist, add constraints to eliminate them and re-solve.
+        2. Check the solution for any invalid tours (subtours or long tours).
+        3. If invalid tours exist, add constraints to eliminate them and re-solve.
         4. Repeat until a valid solution is found or the time limit is reached.
 
         Args:
             time_limit_secs: The maximum time in seconds allowed for the solver.
+            verbose: If `False`, silences the solver's console output.
 
         Returns:
             A VrpSolution object representing the optimal solution if one is found
             within the time limit; otherwise, `None`.
         """
         start_time = time.time()
+
+        if not verbose:
+            self.m.verbose = 0
 
         iterations = 0
         while time.time() - start_time < time_limit_secs:
@@ -299,48 +360,68 @@ class VrpSolver:
                 print(f"\nNo solution found. Status: {status}")
                 return None
 
-            adj_matrix = [
-                [1 if self.x[i][j].x > 0.001 else 0 for j in self.V] for i in self.V
-            ]
-            all_tours = self._extract_tours(adj_matrix)
+            K = range(self.num_vehicles)
+            all_tours_with_vehicle = []
+            for k in K:
+                # For each vehicle, get its tour from the solution
+                adj_matrix_k = [
+                    [1 if self.x[i, j, k].x > 0.001 else 0 for j in self.V]
+                    for i in self.V
+                ]
+                tours_k = self._extract_tours(adj_matrix_k)
+                for tour in tours_k:
+                    all_tours_with_vehicle.append((tour, k))
 
             # A tour is a subtour if it does not contain any depot.
-            subtours = [
-                tour
-                for tour in all_tours
+            subtours_with_vehicle = [
+                (tour, k)
+                for tour, k in all_tours_with_vehicle
                 if not any(depot_idx in tour for depot_idx in self.depot_idxs)
             ]
 
-            if subtours:
-                self._add_subtour_elimination_constrs(subtours)
+            if subtours_with_vehicle:
+                # We only need the unique subtours, not which vehicle performed them.
+                # A generalized constraint will prevent any vehicle from forming it.
+                unique_subtours = list(
+                    {tuple(sorted(tour)) for tour, k in subtours_with_vehicle}
+                )
+                print(
+                    f"{len(unique_subtours)} unique subtours found. Adding generalized subtour elimination constraints."
+                )
+                self._add_generalized_subtour_break_constrs(
+                    [list(t) for t in unique_subtours]
+                )
                 continue
 
-            # If we are here, no subtours were found. Check for tour length violations.
-            if self.max_tour_length is not None and self.max_tour_length > 0:
-                long_tours = [
-                    tour
-                    for tour in all_tours
-                    if self._get_tour_length(tour) > self.max_tour_length
-                ]
-                if long_tours:
-                    print(
-                        f"Found {len(long_tours)} tours exceeding max length ({self.max_tour_length}). Adding constraints."
-                    )
-                    self._add_subtour_elimination_constrs(long_tours)
-                    continue
+            # Check for tour length violations for each vehicle's specific range
+            long_tours_with_vehicle = []
+            for tour, k in all_tours_with_vehicle:
+                vehicle_range = self.vehicles[k].range_kms
+                if vehicle_range > 0 and self._get_tour_length(tour) > vehicle_range:
+                    long_tours_with_vehicle.append((tour, k))
+
+            if long_tours_with_vehicle:
+                print(
+                    f"{len(long_tours_with_vehicle)} long tours found. Adding vehicle-specific constraints."
+                )
+                self._add_vehicle_specific_tour_break_constrs(long_tours_with_vehicle)
+                continue
 
             # Convert index-based tours to Tour objects for the final solution
             solution_tours = []
             all_locations = self.instance.distance_matrix.locations
-            for tour_indices in all_tours:
-                tour_locations = tuple(all_locations[i] for i in tour_indices)
-                tour_length = self._get_tour_length(tour_indices)
-                tour_demand = sum(self.demands.get(i, 0) for i in tour_indices)
-                solution_tours.append(
-                    Tour(
-                        locations=tour_locations, length=tour_length, demand=tour_demand
+            for tour_indices, k in all_tours_with_vehicle:
+                if len(tour_indices) > 2:  # Only include tours that visit customers
+                    tour_locations = tuple(all_locations[i] for i in tour_indices)
+                    tour_length = self._get_tour_length(tour_indices)
+                    tour_demand = sum(self.demands.get(i, 0) for i in tour_indices)
+                    solution_tours.append(
+                        Tour(
+                            locations=tour_locations,
+                            length=tour_length,
+                            demand=tour_demand,
+                        )
                     )
-                )
 
             # If we reach here, the solution is valid (no subtours and all tours are within range).
             total_time_secs = time.time() - start_time

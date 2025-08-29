@@ -40,37 +40,17 @@ poetry run pytest
 
 ## 🚀 Usage
 
-The basic workflow involves defining a problem instance, passing it to the solver, and then using the returned solution object.
+The primary way to run the solver is via the `main.py` script, which accepts a path to a problem instance JSON file.
 
-Here is a minimal example:
-```python
-from src.instance import Customer, Depot, DistanceMatrix, Vehicle, VrpInstance
-from src.model import VrpSolver
-
-# 1. Define locations and the distance matrix
-depot = Depot(name="D0", coords=(0, 0), fleet=(Vehicle(capacity=0, range_kms=0),))
-customer = Customer(name="C1", coords=(1, 1), demand=1)
-all_locs = (depot, customer)
-dist_matrix = DistanceMatrix(locations=all_locs, matrix=((0, 10), (10, 0)))
-
-# 2. Define the problem instance
-instance = VrpInstance(
-    depots=(depot,), customers=(customer,), distance_matrix=dist_matrix
-)
-
-# 3. Create and build the solver
-solver = VrpSolver(instance)
-solver.build()
-
-# 4. Solve the model
-solution = solver.solve()
-
-# 5. Use the solution
-if solution:
-    print(f"Tours: {solution.tours}")
-    print(f"Cost: {solution.objective_value}")
-
-    # If coordinates were provided in the instance, you can also plot the solution
-    # fig = solution.plot()
-    # fig.savefig("solution_plot.png")
+**Basic Usage:**
+```bash
+poetry run python main.py <path_to_instance_file>
 ```
+
+The script will output the solution summary to the console and save a plot of the solution to the `plots/` directory.
+
+**Options:**
+- `--no-sb`: Disable symmetry-breaking constraints.
+- `--v`: Print the MIP solver's output.
+
+![Example solution](assets/solution_example.png){: style="display: block; margin-left: auto; margin-right: auto; width: 500px;" }

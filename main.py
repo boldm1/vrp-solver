@@ -1,4 +1,4 @@
-import json
+import argparse
 import os
 
 from matplotlib import pyplot as plt
@@ -9,20 +9,42 @@ from src.model import VrpSolver
 
 def main():
     """
-    Main function to run the VRP solver on an instance defined in a locally saved json 
-    file.
+    Main function to run the VRP solver on an instance defined in a JSON file.
+    Accepts command-line arguments for the instance file path and other options.
     """
+    parser = argparse.ArgumentParser(
+        description="Run the VRP solver on a given instance."
+    )
+    parser.add_argument(
+        "instance_path",
+        type=str,
+        help="Path to the VRP instance JSON file (e.g., 'data/google_vrp_example.json').",
+    )
+    parser.add_argument(
+        "--no-sb",
+        action="store_false",
+        dest="use_symmetry_breaking",
+        help="Disable symmetry-breaking constraints.",
+    )
+    parser.add_argument(
+        "--v",
+        action="store_true",
+        dest="verbose",
+        help="Print the MIP solver's output.",
+    )
+    args = parser.parse_args()
 
     # 1. Load the problem instance from file
-    data_filepath = "data/multi_depot_example.json"
+    data_filepath = args.instance_path
+    print(f"Loading instance from: {data_filepath}")
     instance = VrpInstance.from_json_file(data_filepath)
 
     # 2. Create and build the solver
-    solver = VrpSolver(instance)
+    solver = VrpSolver(instance, use_symmetry_breaking=args.use_symmetry_breaking)
     solver.build()
 
     # 3. Solve the model
-    solution = solver.solve()
+    solution = solver.solve(verbose=args.verbose)
 
     # 4. Process and plot the solution
     if solution:
@@ -36,7 +58,9 @@ def main():
         # Create a directory for plots if it doesn't exist
         plots_dir = "plots"
         os.makedirs(plots_dir, exist_ok=True)
-        save_path = os.path.join(plots_dir, "google_vrp_solution.png")
+        # Get the filename from the data filepath to create a unique plot name
+        plot_filename = os.path.splitext(os.path.basename(data_filepath))[0] + ".png"
+        save_path = os.path.join(plots_dir, plot_filename)
 
         # Generate the plot and save it
         print(f"\nSaving solution plot to: {save_path}")

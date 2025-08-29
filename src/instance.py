@@ -35,10 +35,12 @@ class Vehicle:
     Attributes:
         capacity: The capacity of the vehicle.
         range_kms: The range of the vehicle in kilometers.
+        fixed_cost: The fixed cost of using the vehicle.
     """
 
     capacity: int
     range_kms: int
+    fixed_cost: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -146,6 +148,7 @@ class VrpInstance:
                         Vehicle(
                             capacity=vehicle_spec.get("capacity", 0),
                             range_kms=vehicle_spec.get("range_kms", 0),
+                            fixed_cost=vehicle_spec.get("fixed_cost", 0.0),
                         )
                     )
                 all_locations.append(
