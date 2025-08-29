@@ -1,6 +1,10 @@
 # VRP Solver 🚚
 
-A simple Vehicle Routing Problem (VRP) solver that uses Mixed-Integer Programming (MIP) with lazy subtour elimination.
+A Vehicle Routing Problem (VRP) solver that uses Mixed-Integer Programming (MIP) to solve the following types of VRPs:
+
+- Vehicle capacities (capacitated VRP)
+- Multiple depots
+- Fleets of heterogeneous vehicles, i.e. with different capacities, ranges, costs.
 
 ## Overview
 
