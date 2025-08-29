@@ -5,14 +5,14 @@ from collections import defaultdict
 
 import numpy as np
 from matplotlib import pyplot as plt
-from libs.pyvrp.pyvrp import (
+from libs.PyVRP.pyvrp import (
     Client as PyVrpClient,
     Depot as PyVrpDepot,
     Model as PyVrpModel,
     ProblemData as PyVrpProblemData,
     VehicleType as PyVrpVehicleType,
 )
-from libs.pyvrp.pyvrp.stop import MaxIterations
+from libs.PyVRP.pyvrp.stop import MaxIterations
 
 from src.instance import Customer, VrpInstance
 from src.solution import Tour, VrpSolution

@@ -1,11 +1,6 @@
-import json
-import os
-
-from matplotlib import pyplot as plt
-
 from src.instance import Customer, Depot, DistanceMatrix, Vehicle, VrpInstance
 from src.model import VrpSolver
-from tests.conftest import params
+from vrp_tests.conftest import params
 
 
 class TestVrpSolver:
@@ -197,7 +192,6 @@ class TestVrpSolver:
         assert solution is not None
         assert solution.objective_value == 240
         assert len(solution.tours) == 2
-
 
     @params(
         {
