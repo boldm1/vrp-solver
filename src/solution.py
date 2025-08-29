@@ -1,9 +1,23 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from src.instance import VrpInstance
-
 import matplotlib.pyplot as plt
+
+from src.instance import VrpInstance, Location
+
+@dataclass(frozen=True)
+class Tour:
+    """Represents a single tour/route for a vehicle."""
+
+    locations: Tuple[Location, ...]
+    length: float
+    demand: int
+
+    def __repr__(self) -> str:
+        """Provides a developer-friendly representation of the tour."""
+        location_names = " -> ".join(loc.name for loc in self.locations)
+        return f"Tour(length={self.length:.2f}, demand={self.demand}, path=[{location_names}])"
+
 
 @dataclass
 class VrpSolution:
@@ -11,13 +25,13 @@ class VrpSolution:
     Represents a solution to a Vehicle Routing Problem.
 
     Attributes:
-        tours: A list of tours, where each tour is a list of location indices.
+        tours: A tuple of Tour objects, each representing a vehicle's route.
         objective_value: The total cost (e.g., distance) of the solution.
         solve_time_secs: The time taken to find the solution in seconds.
         instance: The VrpInstance object that this solution solves.
     """
 
-    tours: List[List[int]]
+    tours: Tuple[Tour, ...]
     objective_value: float
     solve_time_secs: Optional[float]
     instance: VrpInstance
@@ -43,7 +57,9 @@ class VrpSolution:
         """
         all_locations = self.instance.distance_matrix.locations
         if not all([loc.coords for loc in all_locations]):
-            raise ValueError("Cannot plot solution without coordinates for all locations.")
+            raise ValueError(
+                "Cannot plot solution without coordinates for all locations."
+            )
 
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
@@ -69,8 +85,9 @@ class VrpSolution:
         # Draw each tour
         if self.tours:
             for tour in self.tours:
-                tour_x = [x[i] for i in tour]
-                tour_y = [y[i] for i in tour]
+                tour_coords = [loc.coords for loc in tour.locations]
+                tour_x = [coord[0] for coord in tour_coords]
+                tour_y = [coord[1] for coord in tour_coords]
                 ax.plot(tour_x, tour_y, "b-", zorder=1)
 
         ax.set_xlabel("X")

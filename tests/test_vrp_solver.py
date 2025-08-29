@@ -3,7 +3,7 @@ import os
 
 from matplotlib import pyplot as plt
 
-from src.instance import Customer, Depot, DistanceMatrix, VrpInstance
+from src.instance import Customer, Depot, DistanceMatrix, Vehicle, VrpInstance
 from src.model import VrpSolver
 from tests.conftest import params
 
@@ -12,15 +12,29 @@ class TestVrpSolver:
     @params(
         {
             "1 depot, 1 customer": {
-                "depots": (Depot(name="D1", coords=(0, 0), num_vehicles=1),),
+                "depots": (
+                    Depot(
+                        name="D1",
+                        coords=(0, 0),
+                        fleet=(Vehicle(capacity=0, range_kms=0),),
+                    ),
+                ),
                 "customers": (Customer(name="C1", coords=(1, 1), demand=1),),
                 "matrix": ((0, 10), (10, 0)),
                 "expected_tours": [[0, 1, 0]],
             },
             "2 depots, 2 customers": {
                 "depots": (
-                    Depot(name="D1", coords=(0, 0), num_vehicles=1),
-                    Depot(name="D2", coords=(10, 10), num_vehicles=1),
+                    Depot(
+                        name="D1",
+                        coords=(0, 0),
+                        fleet=(Vehicle(capacity=0, range_kms=0),),
+                    ),
+                    Depot(
+                        name="D2",
+                        coords=(10, 10),
+                        fleet=(Vehicle(capacity=0, range_kms=0),),
+                    ),
                 ),
                 "customers": (
                     Customer(name="C1", coords=(0, 5), demand=1),
@@ -48,9 +62,99 @@ class TestVrpSolver:
         solver.build()
         solution = solver.solve()
         assert solution is not None
+
+        # Convert solution tours back to lists of indices for comparison
+        solved_tour_indices = [
+            [solution.instance.distance_matrix.get_index(loc) for loc in tour.locations]
+            for tour in solution.tours
+        ]
         # Compare tours as a set of tuples to ignore order
-        assert set(map(tuple, solution.tours)) == set(map(tuple, expected_tours))
+        assert set(map(tuple, solved_tour_indices)) == set(map(tuple, expected_tours))
         assert solution.instance == instance
+
+    def test_max_tour_length_constraint(self):
+        """
+        Tests that the max_tour_length constraint forces the solver to use more
+        vehicles if the shortest path exceeds the limit.
+        """
+        # With no constraint, the optimal solution is one tour: D->C1->C2->D, with a
+        # length of 10 + 14 + 10 = 34.
+        # By setting max_tour_length=30, we force the solver to use two separate tours:
+        # D->C1->D (length 20) and D->C2->D (length 20).
+        # The total cost becomes 40.
+        depots = (
+            Depot(
+                name="D1",
+                coords=(0, 0),
+                fleet=(
+                    Vehicle(capacity=0, range_kms=30),
+                    Vehicle(capacity=0, range_kms=30),
+                ),
+            ),
+        )
+        customers = (
+            Customer(name="C1", coords=(10, 0), demand=1),
+            Customer(name="C2", coords=(0, 10), demand=1),
+        )
+        all_locations = depots + customers
+        matrix = (
+            (0, 10, 10),  # D1 -> (D1, C1, C2)
+            (10, 0, 14),  # C1 -> (D1, C1, C2)
+            (10, 14, 0),  # C2 -> (D1, C1, C2)
+        )
+        distance_matrix = DistanceMatrix(locations=all_locations, matrix=matrix)
+
+        instance = VrpInstance(
+            depots=depots, customers=customers, distance_matrix=distance_matrix
+        )
+        solver = VrpSolver(instance)
+        solver.build()
+        solution = solver.solve()
+
+        assert solution is not None
+        assert solution.objective_value == 40
+
+    def test_capacity_constraint(self):
+        """
+        Tests that the capacity constraint forces the solver to use more
+        vehicles if the total demand on a tour exceeds capacity.
+        """
+        # With no capacity constraint, the optimal solution is one tour visiting both customers.
+        # Total demand is 8 + 8 = 16.
+        # By setting vehicle capacity to 10, we force two separate tours.
+        # The total cost becomes (10+10) + (10+10) = 40.
+        depots = (
+            Depot(
+                name="D1",
+                coords=(0, 0),
+                fleet=(
+                    Vehicle(capacity=10, range_kms=0),
+                    Vehicle(capacity=10, range_kms=0),
+                ),
+            ),
+        )
+        customers = (
+            Customer(name="C1", coords=(10, 0), demand=8),
+            Customer(name="C2", coords=(0, 10), demand=8),
+        )
+        all_locations = depots + customers
+        matrix = (
+            (0, 10, 10),  # D1 -> (D1, C1, C2)
+            (10, 0, 14),  # C1 -> (D1, C1, C2)
+            (10, 14, 0),  # C2 -> (D1, C1, C2)
+        )
+        distance_matrix = DistanceMatrix(locations=all_locations, matrix=matrix)
+
+        instance = VrpInstance(
+            depots=depots, customers=customers, distance_matrix=distance_matrix
+        )
+        solver = VrpSolver(instance)
+        solver.build()
+        solution = solver.solve()
+
+        assert solution is not None
+        assert solution.objective_value == 40
+        assert len(solution.tours) == 2
 
     def test_with_google_vrp_example(self):
         """Test solver on instance taken from https://developers.google.com/optimization/routing/vrp."""

@@ -140,11 +140,29 @@
     "depots": [
         {
             "name": "Depot_A",
-            "num_vehicles": 2
+            "fleet": [
+                {
+                    "capacity": 1000,
+                    "range_kms": 10000
+                },
+                {
+                    "capacity": 1000,
+                    "range_kms": 10000
+                }
+            ]
         },
         {
             "name": "Depot_B",
-            "num_vehicles": 2
+            "fleet": [
+                {
+                    "capacity": 1000,
+                    "range_kms": 10000
+                },
+                {
+                    "capacity": 1000,
+                    "range_kms": 10000
+                }
+            ]
         }
     ],
     "distance_matrix": [

@@ -17,13 +17,14 @@ class Location(abc.ABC):
     name: str
     coords: Tuple[int, int]
 
+
 @dataclass(frozen=True)
 class Customer(Location):
     """
     Extends the Location class to represent a customer with a demand.
     """
-    demand: int
 
+    demand: int
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,13 @@ class Depot(Location):
     Extends the Location class to represent a depot with an associated fleet of vehicles.
     """
 
-    num_vehicles: int
+    fleet: Tuple[Vehicle, ...]
+
+    @property
+    def num_vehicles(self) -> int:
+        """Returns the number of vehicles in the fleet."""
+        return len(self.fleet)
+
 
 
 @dataclass(frozen=True)
@@ -96,6 +103,11 @@ class VrpInstance:
     customers: Tuple[Customer, ...]
     distance_matrix: DistanceMatrix
 
+    @property
+    def num_vehicles(self) -> int:
+        """Returns the total number of vehicles across all depots."""
+        return sum(d.num_vehicles for d in self.depots)
+
     def __post_init__(self):
         """Validates that all depots and customers are in the distance matrix."""
         dm_locations = set(self.distance_matrix.locations)
@@ -109,15 +121,11 @@ class VrpInstance:
                 raise ValueError(
                     f"Customer '{customer.name}' is not in the distance matrix."
                 )
-    @property
-    def num_vehicles(self) -> int:
-        """Returns the total number of vehicles across all depots."""
-        return sum(depot.num_vehicles for depot in self.depots)
 
     @classmethod
     def from_json_file(cls, filepath: str) -> "VrpInstance":
         """Loads a VRP instance from a JSON file."""
-        
+
         with open(filepath, "r") as f:
             data = json.load(f)
 
@@ -131,11 +139,20 @@ class VrpInstance:
             loc_name = loc_data["name"]
             if loc_name in depot_info_map:
                 # This is a depot, create a Depot object
+                depot_spec = depot_info_map[loc_name]
+                fleet = []
+                for vehicle_spec in depot_spec["fleet"]:
+                    fleet.append(
+                        Vehicle(
+                            capacity=vehicle_spec.get("capacity", 0),
+                            range_kms=vehicle_spec.get("range_kms", 0),
+                        )
+                    )
                 all_locations.append(
                     Depot(
                         name=loc_name,
                         coords=tuple(loc_data["coords"]),
-                        num_vehicles=depot_info_map[loc_name]["num_vehicles"],
+                        fleet=tuple(fleet),
                     )
                 )
             else:

@@ -44,11 +44,11 @@ The basic workflow involves defining a problem instance, passing it to the solve
 
 Here is a minimal example:
 ```python
-from src.instance import Customer, Depot, DistanceMatrix, VrpInstance
+from src.instance import Customer, Depot, DistanceMatrix, Vehicle, VrpInstance
 from src.model import VrpSolver
 
 # 1. Define locations and the distance matrix
-depot = Depot(name="D0", coords=(0, 0), num_vehicles=1)
+depot = Depot(name="D0", coords=(0, 0), fleet=(Vehicle(capacity=0, range_kms=0),))
 customer = Customer(name="C1", coords=(1, 1), demand=1)
 all_locs = (depot, customer)
 dist_matrix = DistanceMatrix(locations=all_locs, matrix=((0, 10), (10, 0)))
