@@ -19,7 +19,7 @@ from collections import defaultdict
 
 from mip import BINARY, Model, OptimizationStatus, minimize, xsum
 
-from src.cli_utils import print_solution_summary, save_solution_plot
+from src.cli_utils import print_solution_summary, save_solution_plots
 from src.instance import Vehicle, VrpInstance
 from src.solution import Tour, VrpSolution
 
@@ -483,10 +483,11 @@ def main():
 
     # 3. Process and plot the solution
     if solution:
-        print_solution_summary(solution)
-        save_solution_plot(solution, args.instance_path, "mip")
+        print_solution_summary(solution, "mip")
+        save_solution_plots(solution, args.instance_path, "mip")
     else:
         print("\nNo solution found by MIP solver.")
+
 
 if __name__ == "__main__":
     main()

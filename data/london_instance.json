@@ -1,0 +1,141 @@
+{
+    "locations": [
+        {
+            "name": "Westminster Abbey, London",
+            "coords": [
+                -0.127391,
+                51.499399
+            ]
+        },
+        {
+            "name": "The British Museum, London",
+            "coords": [
+                -0.1274856,
+                51.5193755
+            ],
+            "demand": 5
+        },
+        {
+            "name": "Tate Modern, London",
+            "coords": [
+                -0.0993416,
+                51.5074293
+            ],
+            "demand": 3
+        },
+        {
+            "name": "Shakespeare's Globe, London",
+            "coords": [
+                -0.0971864,
+                51.5081214
+            ],
+            "demand": 4
+        },
+        {
+            "name": "Tower of London, London",
+            "coords": [
+                -0.0761879,
+                51.508217
+            ],
+            "demand": 6
+        },
+        {
+            "name": "Buckingham Palace, London",
+            "coords": [
+                -0.1430045,
+                51.5008349
+            ],
+            "demand": 2
+        },
+        {
+            "name": "St. Paul's Cathedral, London",
+            "coords": [
+                -0.0984506,
+                51.5137871
+            ],
+            "demand": 5
+        }
+    ],
+    "depots": [
+        {
+            "name": "Westminster Abbey, London",
+            "fleet": [
+                {
+                    "capacity": 15,
+                    "range_kms": 0,
+                    "fixed_cost": 50
+                },
+                {
+                    "capacity": 15,
+                    "range_kms": 0,
+                    "fixed_cost": 50
+                }
+            ]
+        }
+    ],
+    "distance_matrix": [
+        [
+            0,
+            2674,
+            3242,
+            3592,
+            5035,
+            1311,
+            3325
+        ],
+        [
+            2339,
+            0,
+            4014,
+            4317,
+            5001,
+            3056,
+            2820
+        ],
+        [
+            3107,
+            4111,
+            0,
+            942,
+            2500,
+            4212,
+            2264
+        ],
+        [
+            3322,
+            4326,
+            390,
+            0,
+            2601,
+            4427,
+            2416
+        ],
+        [
+            4797,
+            5074,
+            2495,
+            2463,
+            0,
+            5902,
+            2432
+        ],
+        [
+            1463,
+            2979,
+            4166,
+            4516,
+            5820,
+            0,
+            3861
+        ],
+        [
+            3309,
+            2768,
+            2164,
+            2438,
+            2181,
+            4155,
+            0
+        ]
+    ]
+}

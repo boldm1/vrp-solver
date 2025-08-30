@@ -49,6 +49,10 @@ poetry run pytest
 
 The project provides two command-line entry points, one for each solver. Both accept a path to a problem instance JSON file, output the solution summary to the console, and save a plot of the solution to the `plots/` directory.
 
+The solvers generate two types of plots for each solution:
+- A static plot (`.png`) showing the routes on a 2D coordinate plane.
+- An interactive map (`.html`) showing the routes on a real-world map using OpenStreetMap tiles. You can open this file in your browser to explore the solution.
+
 ### MIP Solver
 
 This solver provides an exact solution using Mixed-Integer Programming. It is generally slower but guarantees optimality for smaller instances.

@@ -10,7 +10,7 @@ from pyvrp import ProblemData as PyVrpProblemData
 from pyvrp import VehicleType as PyVrpVehicleType
 from pyvrp.stop import MaxIterations
 
-from src.cli_utils import print_solution_summary, save_solution_plot
+from src.cli_utils import print_solution_summary, save_solution_plots
 from src.instance import Customer, VrpInstance
 from src.solution import Tour, VrpSolution
 
@@ -169,8 +169,8 @@ def main():
 
     # 3. Process and plot the solution
     if solution:
-        print_solution_summary(solution)
-        save_solution_plot(solution, data_filepath, "hgs")
+        print_solution_summary(solution, "PyVRP")
+        save_solution_plots(solution, data_filepath, "PyVRP")
     else:
         print("\nNo solution found by pyvrp.")
 
