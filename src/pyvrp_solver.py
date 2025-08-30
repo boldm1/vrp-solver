@@ -1,19 +1,16 @@
 import argparse
-import os
 import time
 from collections import defaultdict
 
 import numpy as np
-from matplotlib import pyplot as plt
-from libs.PyVRP.pyvrp import (
-    Client as PyVrpClient,
-    Depot as PyVrpDepot,
-    Model as PyVrpModel,
-    ProblemData as PyVrpProblemData,
-    VehicleType as PyVrpVehicleType,
-)
-from libs.PyVRP.pyvrp.stop import MaxIterations
+from pyvrp import Client as PyVrpClient
+from pyvrp import Depot as PyVrpDepot
+from pyvrp import Model as PyVrpModel
+from pyvrp import ProblemData as PyVrpProblemData
+from pyvrp import VehicleType as PyVrpVehicleType
+from pyvrp.stop import MaxIterations
 
+from src.cli_utils import print_solution_summary, save_solution_plot
 from src.instance import Customer, VrpInstance
 from src.solution import Tour, VrpSolution
 
@@ -42,7 +39,7 @@ class PyVrpSolver:
             PyVrpDepot(x=d.coords[0], y=d.coords[1]) for d in self.instance.depots
         ]
         pyvrp_clients = [
-            PyVrpClient(x=c.coords[0], y=c.coords[1], delivery=c.demand)
+            PyVrpClient(x=c.coords[0], y=c.coords[1], delivery=[c.demand])
             for c in self.instance.customers
         ]
 
@@ -59,8 +56,11 @@ class PyVrpSolver:
                 vehicle_types.append(
                     PyVrpVehicleType(
                         num_available=num,
-                        capacity=capacity,
-                        depot=depot_idx,
+                        capacity=[capacity],
+                        start_depot=depot_idx,
+                        end_depot=depot_idx,
+                        tw_early=0,
+                        tw_late=np.iinfo(np.int64).max,
                         max_distance=range_kms if range_kms > 0 else 0,
                         fixed_cost=fixed_cost,
                     )
@@ -69,7 +69,7 @@ class PyVrpSolver:
         # 3. Create the distance matrix in the order pyvrp expects: depots, then clients.
         ordered_locs = list(self.instance.depots) + list(self.instance.customers)
         num_locs = len(ordered_locs)
-        dist_matrix = np.zeros((num_locs, num_locs), dtype=int)
+        dist_matrix: np.ndarray = np.zeros((num_locs, num_locs), dtype=int)
 
         for i, loc1 in enumerate(ordered_locs):
             for j, loc2 in enumerate(ordered_locs):
@@ -82,7 +82,8 @@ class PyVrpSolver:
             clients=pyvrp_clients,
             depots=pyvrp_depots,
             vehicle_types=vehicle_types,
-            distance_matrix=dist_matrix,
+            distance_matrices=[dist_matrix],
+            duration_matrices=[dist_matrix],
         )
 
     def solve(self, stop: MaxIterations = MaxIterations(5000)) -> VrpSolution | None:
@@ -95,6 +96,8 @@ class PyVrpSolver:
         Returns:
             A VrpSolution object if a feasible solution is found, otherwise None.
         """
+        start_time = time.time()
+
         model = PyVrpModel.from_data(self._data)
         result = model.solve(stop)
 
@@ -112,7 +115,7 @@ class PyVrpSolver:
 
             # pyvrp route indices refer to the combined list of [depots] + [clients]
             tour_locations = tuple(all_locations[i] for i in route.visits())
-            depot_idx = route.depot()
+            depot_idx = route.start_depot()  # Assumed that start_depot == end_depot
             depot_loc = self.instance.depots[depot_idx]
 
             # Reconstruct the full tour path including the depot
@@ -130,10 +133,12 @@ class PyVrpSolver:
                 )
             )
 
+        total_time_secs = time.time() - start_time
+
         return VrpSolution(
             tours=tuple(solution_tours),
             objective_value=result.cost(),
-            solve_time_secs=result.runtime,
+            solve_time_secs=total_time_secs,
             instance=self.instance,
         )
 
@@ -159,35 +164,16 @@ def main():
 
     # 2. Create and run the solver
     print("\nSolving with pyvrp heuristic solver...")
-    start_time = time.time()
     solver = PyVrpSolver(instance)
     solution = solver.solve()
-    solve_time = time.time() - start_time
 
     # 3. Process and plot the solution
     if solution:
-        print("\n--- Solution Summary ---")
-        print(f"Objective value: {solution.objective_value:.4f}")
-        print(
-            f"Total solve time: {solve_time:.2f} seconds (pyvrp runtime: {solution.solve_time_secs:.2f}s)"
-        )
-        print("Tours:")
-        for i, tour in enumerate(solution.tours):
-            print(f"  Route {i+1}: {tour}")
-
-        # Create a directory for plots if it doesn't exist
-        plots_dir = "plots"
-        os.makedirs(plots_dir, exist_ok=True)
-        # Get the filename from the data filepath to create a unique plot name
-        plot_filename = (
-            os.path.splitext(os.path.basename(data_filepath))[0] + "_heuristic.png"
-        )
-        save_path = os.path.join(plots_dir, plot_filename)
-
-        # Generate the plot and save it
-        print(f"\nSaving solution plot to: {save_path}")
-        fig = solution.plot()
-        fig.savefig(save_path)
-        plt.close(fig)  # Close the figure to free up memory
+        print_solution_summary(solution)
+        save_solution_plot(solution, data_filepath, "hgs")
     else:
         print("\nNo solution found by pyvrp.")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,3 +1,4 @@
+import argparse
 import glob
 import os
 from typing import List
@@ -18,11 +19,12 @@ from collections import defaultdict
 
 from mip import BINARY, Model, OptimizationStatus, minimize, xsum
 
-from src.instance import VrpInstance, Vehicle
+from src.cli_utils import print_solution_summary, save_solution_plot
+from src.instance import Vehicle, VrpInstance
 from src.solution import Tour, VrpSolution
 
 
-class VrpSolver:
+class MipSolver:
     """
     A Mixed-Integer Programming (MIP) model for the Vehicle Routing Problem (VRP).
 
@@ -37,7 +39,7 @@ class VrpSolver:
         instance: VrpInstance,
         use_symmetry_breaking: bool = True,
     ):
-        """Initializes the VrpSolver.
+        """Initializes the MipSolver.
 
         Args:
             instance: The VrpInstance object containing the problem data.
@@ -72,7 +74,10 @@ class VrpSolver:
             for c in self.instance.customers
         }
 
-    def build(self):
+        # Build the MIP model
+        self._build()
+
+    def _build(self):
         """Builds the VRP model by defining variables, constraints, and the objective.
 
         This method sets up the initial MIP formulation without subtour elimination
@@ -206,7 +211,7 @@ class VrpSolver:
         self.m.objective = minimize(total_travel_distance + total_fixed_cost)
 
     @staticmethod
-    def _extract_tours(adj_matrix: List[List[int]]) -> List[List[int]]:
+    def _extract_tours_from_adj_matrix(adj_matrix: List[List[int]]) -> List[List[int]]:
         """
         Converts an adjacency matrix representation of a solution into a list of tours.
 
@@ -309,15 +314,13 @@ class VrpSolver:
             nodes_in_tour = list(set(tour))
             if len(nodes_in_tour) > 1:
                 self.m.add_constr(
-                    xsum(
-                        self.x[i, j, k]
-                        for i in nodes_in_tour
-                        for j in nodes_in_tour
-                    )
+                    xsum(self.x[i, j, k] for i in nodes_in_tour for j in nodes_in_tour)
                     <= len(nodes_in_tour) - 1
                 )
 
-    def solve(self, time_limit_secs: int = 60, verbose: bool = False) -> VrpSolution | None:
+    def solve(
+        self, time_limit_secs: int = 60, verbose: bool = False
+    ) -> VrpSolution | None:
         """Solves the VRP model and returns the optimal tours.
 
         This method uses an iterative approach to find a solution without subtours:
@@ -368,7 +371,7 @@ class VrpSolver:
                     [1 if self.x[i, j, k].x > 0.001 else 0 for j in self.V]
                     for i in self.V
                 ]
-                tours_k = self._extract_tours(adj_matrix_k)
+                tours_k = self._extract_tours_from_adj_matrix(adj_matrix_k)
                 for tour in tours_k:
                     all_tours_with_vehicle.append((tour, k))
 
@@ -439,3 +442,51 @@ class VrpSolver:
 
         print("\nCould not find a solution without subtours within the time limit.")
         return None
+
+
+def main():
+    """
+    Main function to run the MIP VRP solver on an instance defined in a JSON file.
+    Accepts command-line arguments for the instance file path and other options.
+    """
+    parser = argparse.ArgumentParser(
+        description="Run the MIP VRP solver on a given instance."
+    )
+    parser.add_argument(
+        "instance_path",
+        type=str,
+        help="Path to the VRP instance JSON file (e.g., 'data/google_vrp_example.json').",
+    )
+    parser.add_argument(
+        "--no-sb",
+        action="store_false",
+        dest="use_symmetry_breaking",
+        help="Disable symmetry-breaking constraints.",
+    )
+    parser.add_argument(
+        "--v",
+        action="store_true",
+        dest="verbose",
+        help="Print the MIP solver's output.",
+    )
+    args = parser.parse_args()
+
+    # 1. Load the problem instance from file
+    data_filepath = args.instance_path
+    print(f"Loading instance from: {data_filepath}")
+    instance = VrpInstance.from_json_file(args.instance_path)
+
+    # 2. Create and run the solver
+    print("\nSolving with MIP exact solver...")
+    solver = MipSolver(instance, use_symmetry_breaking=args.use_symmetry_breaking)
+    solution = solver.solve(verbose=args.verbose)
+
+    # 3. Process and plot the solution
+    if solution:
+        print_solution_summary(solution)
+        save_solution_plot(solution, args.instance_path, "mip")
+    else:
+        print("\nNo solution found by MIP solver.")
+
+if __name__ == "__main__":
+    main()

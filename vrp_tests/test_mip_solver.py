@@ -1,5 +1,5 @@
 from src.instance import Customer, Depot, DistanceMatrix, Vehicle, VrpInstance
-from src.model import VrpSolver
+from src.mip_solver import MipSolver
 from vrp_tests.conftest import params
 
 
@@ -53,7 +53,7 @@ class TestVrpSolver:
         instance = VrpInstance(
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
-        solver = VrpSolver(instance)
+        solver = MipSolver(instance)
         solver.build()
         solution = solver.solve()
         assert solution is not None
@@ -102,7 +102,7 @@ class TestVrpSolver:
         instance = VrpInstance(
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
-        solver = VrpSolver(instance)
+        solver = MipSolver(instance)
         solver.build()
         solution = solver.solve()
 
@@ -143,7 +143,7 @@ class TestVrpSolver:
         instance = VrpInstance(
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
-        solver = VrpSolver(instance)
+        solver = MipSolver(instance)
         solver.build()
         solution = solver.solve()
 
@@ -185,7 +185,7 @@ class TestVrpSolver:
         instance = VrpInstance(
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
-        solver = VrpSolver(instance)
+        solver = MipSolver(instance)
         solver.build()
         solution = solver.solve()
 
@@ -226,6 +226,6 @@ class TestVrpSolver:
         }
     )
     def test_extract_tours(self, adjacency_matrix, expected_result):
-        tours = VrpSolver._extract_tours(adjacency_matrix)
+        tours = MipSolver._extract_tours_from_adj_matrix(adjacency_matrix)
         # Compare tours as a set of tuples to ignore order
         assert set(map(tuple, tours)) == set(map(tuple, expected_result))
