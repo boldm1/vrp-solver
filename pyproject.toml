@@ -12,6 +12,7 @@ mip = "==1.16rc0"
 pytest = ">=8.4.1,<9.0.0"
 highspy = ">=1.11.0,<2.0.0"
 matplotlib = ">=3.10.5,<4.0.0"
+pyvrp = {path = "libs/PyVRP", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 pip = "^25.2"

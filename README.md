@@ -8,14 +8,17 @@ A Vehicle Routing Problem (VRP) solver that uses Mixed-Integer Programming (MIP)
 
 ## Overview
 
-This project provides a Python-based solver for the classic Vehicle Routing Problem. It formulates the VRP as a MIP model and solves it using the HiGHS solver, accessed via the `python-mip` library.
+This project provides two Python-based solvers for the classic Vehicle Routing Problem: a custom MIP solver and a metaheuristic solver using the PyVRP library.
 
-A key feature is the iterative (lazy) addition of subtour elimination constraints. There are $2^n$ possible subtours for a set of $n$ locations, and hence the total number of possible subtour constraints grows exponentially with the number of locations. So instead of pre-generating all possible subtour constraints, the model is solved repeatedly, and after each solve the solution is checked for subtours. If any are found, constraints are added to break them, and the model is re-solved. This process continues until a valid, subtour-free solution is found.
+The **MIP solver** formulates the VRP as a Mixed-Integer Programming model and solves it using the [HiGHS](https://highs.dev/) solver, accessed via the `python-mip` library. A key feature is the iterative (lazy) addition of subtour elimination constraints. Instead of pre-generating all possible subtour constraints (which grow exponentially), the model is solved repeatedly. After each solve, the solution is checked for invalid tours. If any are found, constraints are added to break them, and the model is re-solved. This process continues until a valid, subtour-free solution is found.
 
-The project is structured into three main components for clarity and modularity:
+The **PyVRP solver** interfaces with the [PyVRP](https://github.com/PyVRP/PyVRP) solver.
+
+The project is structured into several main components for clarity and modularity:
 
 -  `VrpInstance`: A data class to define the problem (distance matrix, number of vehicles, depot location, etc.).
--  `VrpSolver`: The core class that builds the MIP model and implements the iterative solving logic.
+-  `MipSolver`: The core class that builds the MIP model and implements the iterative solving logic.
+-  `PyVrpSolver`: A wrapper to adapt the problem instance and run the PyVRP solver.
 -  `VrpSolution`: A data class to hold and interact with the solution, including the final tours, objective cost, and a plotting method.
 
 ## 🛠️ Installation
@@ -44,11 +47,15 @@ poetry run pytest
 
 ## 🚀 Usage
 
-The primary way to run the solver is via the `main.py` script, which accepts a path to a problem instance JSON file.
+The project provides two command-line entry points, one for each solver. Both accept a path to a problem instance JSON file, output the solution summary to the console, and save a plot of the solution to the `plots/` directory.
+
+### MIP Solver
+
+This solver provides an exact solution using Mixed-Integer Programming. It is generally slower but guarantees optimality for smaller instances.
 
 **Basic Usage:**
 ```bash
-poetry run python main.py <path_to_instance_file>
+poetry run python src/mip_solver.py <path_to_instance_file>
 ```
 
 The script will output the solution summary to the console and save a plot of the solution to the `plots/` directory.
@@ -57,4 +64,13 @@ The script will output the solution summary to the console and save a plot of th
 - `--no-sb`: Disable symmetry-breaking constraints.
 - `--v`: Print the MIP solver's output.
 
-![Example solution](assets/solution_example.png){: style="display: block; margin-left: auto; margin-right: auto; width: 500px;" }
+### PyVRP Solver
+
+This solver uses the fast PyVRP metaheuristic to find a high-quality solution. It is generally faster and can handle larger instances.
+
+**Basic Usage:**
+```bash
+poetry run python src/pyvrp_solver.py <path_to_instance_file>
+```
+
+![Example solution](assets/solution_example.png)

@@ -1,7 +1,7 @@
 import pytest
 
 from src.instance import Customer, Depot, DistanceMatrix, Vehicle, VrpInstance
-from tests.conftest import params
+from vrp_tests.conftest import params
 
 
 class TestVrpInstance:

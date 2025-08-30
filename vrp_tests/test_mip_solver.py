@@ -1,11 +1,6 @@
-import json
-import os
-
-from matplotlib import pyplot as plt
-
 from src.instance import Customer, Depot, DistanceMatrix, Vehicle, VrpInstance
-from src.model import VrpSolver
-from tests.conftest import params
+from src.mip_solver import MipSolver
+from vrp_tests.conftest import params
 
 
 class TestVrpSolver:
@@ -58,8 +53,7 @@ class TestVrpSolver:
         instance = VrpInstance(
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
-        solver = VrpSolver(instance)
-        solver.build()
+        solver = MipSolver(instance)
         solution = solver.solve()
         assert solution is not None
 
@@ -107,8 +101,7 @@ class TestVrpSolver:
         instance = VrpInstance(
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
-        solver = VrpSolver(instance)
-        solver.build()
+        solver = MipSolver(instance)
         solution = solver.solve()
 
         assert solution is not None
@@ -148,8 +141,7 @@ class TestVrpSolver:
         instance = VrpInstance(
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
-        solver = VrpSolver(instance)
-        solver.build()
+        solver = MipSolver(instance)
         solution = solver.solve()
 
         assert solution is not None
@@ -190,14 +182,12 @@ class TestVrpSolver:
         instance = VrpInstance(
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
-        solver = VrpSolver(instance)
-        solver.build()
+        solver = MipSolver(instance)
         solution = solver.solve()
 
         assert solution is not None
         assert solution.objective_value == 240
         assert len(solution.tours) == 2
-
 
     @params(
         {
@@ -232,6 +222,6 @@ class TestVrpSolver:
         }
     )
     def test_extract_tours(self, adjacency_matrix, expected_result):
-        tours = VrpSolver._extract_tours(adjacency_matrix)
+        tours = MipSolver._extract_tours_from_adj_matrix(adjacency_matrix)
         # Compare tours as a set of tuples to ignore order
         assert set(map(tuple, tours)) == set(map(tuple, expected_result))
