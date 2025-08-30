@@ -54,7 +54,6 @@ class TestVrpSolver:
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
         solver = MipSolver(instance)
-        solver.build()
         solution = solver.solve()
         assert solution is not None
 
@@ -103,7 +102,6 @@ class TestVrpSolver:
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
         solver = MipSolver(instance)
-        solver.build()
         solution = solver.solve()
 
         assert solution is not None
@@ -144,7 +142,6 @@ class TestVrpSolver:
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
         solver = MipSolver(instance)
-        solver.build()
         solution = solver.solve()
 
         assert solution is not None
@@ -186,7 +183,6 @@ class TestVrpSolver:
             depots=depots, customers=customers, distance_matrix=distance_matrix
         )
         solver = MipSolver(instance)
-        solver.build()
         solution = solver.solve()
 
         assert solution is not None
