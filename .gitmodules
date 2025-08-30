@@ -1,0 +1,7 @@
+[submodule "libs/PyVRP"]
+    path = libs/PyVRP
+    url = https://github.com/PyVRP/PyVRP
+
+[submodule "libs/PyVRP/instances"]
+    path = libs/PyVRP/instances
+    url = https://github.com/PyVRP/Instances
